@@ -1,5 +1,6 @@
 using UnityEngine;
 using UnityEngine.InputSystem;
+using System.Collections; 
 
 public class ThirdPersonControllerSimple : MonoBehaviour
 {
@@ -37,6 +38,16 @@ public class ThirdPersonControllerSimple : MonoBehaviour
     private float mouseX;
     private float mouseY;
     private const float maxVerticalAngle = 80f;
+    
+    [Header("Animation Settings")]
+    [SerializeField] private Animator animator;
+    [SerializeField] private float landAnimationDuration = 0.3f;
+    [SerializeField] private float groundCheckDistance = 0.2f;
+    [SerializeField] private LayerMask groundLayer;
+
+    private float lastGroundedTime;
+    private bool wasGrounded = true;
+    private bool isLanding = false;
     
     void Awake()
     {
@@ -105,6 +116,41 @@ public class ThirdPersonControllerSimple : MonoBehaviour
         HandleInput();
         RotateCamera();
         UpdateAttackVisualization();
+        UpdateAnimations(); 
+    }
+    
+    void UpdateAnimations()
+    {
+        if (animator == null) return;
+    
+        CheckGround();
+    
+        // Берем только горизонтальную скорость (игнорируем вертикальную)
+        Vector3 horizontalVelocity = rb.linearVelocity;
+
+        horizontalVelocity.y = 0;
+        float currentSpeed = horizontalVelocity.magnitude;
+    
+        animator.SetBool("isGrounded", isGrounded);
+        animator.SetFloat("verticalVelocity", rb.linearVelocity.y);
+        animator.SetFloat("speed", currentSpeed); // Используем горизонтальную скорость
+    
+        // Определяем прыжок/падение
+        if (!isGrounded)
+        {
+            if (rb.linearVelocity.y > 0.1f)
+            {
+                animator.SetBool("isJumping", true);
+            }
+            else if (rb.linearVelocity.y < -0.1f)
+            {
+                animator.SetBool("isJumping", false);
+            }
+        }
+        else
+        {
+            animator.SetBool("isJumping", false);
+        }
     }
     
     void HandleInput()
@@ -136,22 +182,40 @@ public class ThirdPersonControllerSimple : MonoBehaviour
     void HandleMovement()
     {
         Vector2 moveInput = moveAction.ReadValue<Vector2>();
-        
-        if (moveInput.magnitude == 0) return;
-        
+    
         Vector3 cameraForward = cameraTransform.forward;
         Vector3 cameraRight = cameraTransform.right;
-        
+    
         cameraForward.y = 0;
         cameraRight.y = 0;
         cameraForward.Normalize();
         cameraRight.Normalize();
-        
+    
         Vector3 moveDirection = (cameraForward * moveInput.y + cameraRight * moveInput.x).normalized;
-        Vector3 moveVelocity = moveDirection * moveSpeed;
+        Vector3 targetVelocity = moveDirection * moveSpeed;
+    
+        // Текущая горизонтальная скорость
+        Vector3 currentVelocity = rb.linearVelocity;
+
+        if (currentVelocity.x < 2.1f || currentVelocity.x > -2.1f)
+        {
+            Debug.Log("SET currentVelocity.x = 0 AND currentVelocity.z = 0!!!!");
+            currentVelocity.x = 0;
+            currentVelocity.z = 0;
+        }
+        currentVelocity.y = 0;
+    
+        // Вычисляем силу для достижения целевой скорости
+        Vector3 velocityDifference = targetVelocity - currentVelocity;
+        Vector3 force = velocityDifference * 10f; // Множитель можно настроить
+
         
-        rb.linearVelocity = new Vector3(moveVelocity.x, rb.linearVelocity.y, moveVelocity.z);
+        Debug.Log("force = " + force + "; force.magnitude = " + force.magnitude);
         
+        
+        rb.AddForce(force, ForceMode.Acceleration);
+    
+        // Поворот персонажа
         if (moveDirection != Vector3.zero)
         {
             Quaternion targetRotation = Quaternion.LookRotation(moveDirection);
@@ -161,8 +225,17 @@ public class ThirdPersonControllerSimple : MonoBehaviour
     
     void Jump()
     {
-        rb.AddForce(Vector3.up * jumpForce, ForceMode.Impulse);
-        isGrounded = false;
+        if (isGrounded && !isLanding)
+        {
+            rb.AddForce(Vector3.up * jumpForce, ForceMode.Impulse);
+            isGrounded = false;
+        
+            // Запускаем анимацию прыжка
+            if (animator != null)
+            {
+                animator.SetTrigger("Jump");
+            }
+        }
     }
     
     void Punch()
@@ -220,12 +293,43 @@ public class ThirdPersonControllerSimple : MonoBehaviour
         transform.rotation = Quaternion.Euler(playerRotation);
     }
     
-    void OnCollisionEnter(Collision collision)
+    void CheckGround()
     {
-        if (collision.contacts.Length > 0 && collision.contacts[0].normal.y > 0.5f)
+        RaycastHit hit;
+        bool previouslyGrounded = isGrounded;
+    
+        // Проверяем землю с помощью Raycast
+        isGrounded = Physics.Raycast(
+            transform.position + Vector3.up * 0.1f,
+            Vector3.down,
+            out hit,
+            groundCheckDistance,
+            groundLayer
+        );
+    
+        // Если только что приземлились
+        if (!previouslyGrounded && isGrounded && !isLanding)
         {
-            isGrounded = true;
+            StartCoroutine(PlayLandAnimation());
         }
+    
+        wasGrounded = isGrounded;
+    }
+    
+    IEnumerator PlayLandAnimation()
+    {
+        isLanding = true;
+    
+        // Запускаем анимацию приземления
+        if (animator != null)
+        {
+            animator.SetTrigger("isLanding");
+        }
+    
+        // Ждем завершения анимации
+        yield return new WaitForSeconds(landAnimationDuration);
+    
+        isLanding = false;
     }
     
     void OnDestroy()
