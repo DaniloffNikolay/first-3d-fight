@@ -56,7 +56,7 @@ public class PlayerConrollerNew : MonoBehaviour
         characterController = GetComponent<CharacterController>();
         animator = GetComponent<Animator>();
         
-        animator.applyRootMotion = false;
+        //animator.applyRootMotion = false;
         
         Transform cameraTransform = camera.transform;
         cameraTransform.position = transform.position + cameraOffset;
