@@ -90,11 +90,14 @@ public class PlayerConrollerNew : MonoBehaviour
         
         // Получаем ввод движения для анимации
         Vector2 moveInput = moveAction.ReadValue<Vector2>();
+
+        int direction = getDirection(moveInput);
     
         // Используем глобальные оси или нормализованный ввод для анимации
         float animationSpeed = moveInput.magnitude;
     
         // Обновляем параметры аниматора
+        animator.SetInteger("direction", direction);
         animator.SetFloat("speed", animationSpeed);
         animator.SetBool("isGrounded", isGrounded);
         animator.SetFloat("verticalVelocity", velocity.y);
@@ -296,5 +299,39 @@ public class PlayerConrollerNew : MonoBehaviour
         yield return new WaitForSeconds(landAnimationDuration);
     
         isLanding = false;
+    }
+
+    // 0 - никуда
+    // 1 - прямо
+    // 2 - прямо-право
+    // 3 - прааво
+    // 4 - назд-право
+    // 5 - назад
+    // 6 - назад-лево
+    // 7 - лево
+    // 8 - прямо-лево
+    private int getDirection(Vector2 moveInput)
+    {
+        float x = moveInput.x;
+        float y = moveInput.y;
+
+        if (y == 1)
+            return 1;
+        else if (x > 0 && y > 0)
+            return 2;
+        else if (x == 1)
+            return 3;
+        else if (y < 0 && x > 0)
+            return 4;
+        else if (y == -1)
+            return 5;
+        else if (y < 0 && x < 0)
+            return 6;
+        else if (x == -1)
+            return 7;
+        else if (y > 0 && x < 0)
+            return 8;
+        else
+            return 0;
     }
 }
